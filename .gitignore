@@ -1,0 +1,10 @@
+node_modules/
+cdk/cdk.out/
+cdk/node_modules/
+# terraform: exclude provider binaries (huge) + state (sensitive: account id + resource detail) at ANY depth
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+terraform/.build/
+results/*.log
+!results/.gitkeep

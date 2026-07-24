@@ -1,0 +1,20 @@
+{
+  "name": "cdkd-bench-terraform-cdk",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CDK app (Web app stack) used to benchmark cdkd vs CDK/CloudFormation vs Terraform",
+  "type": "module",
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "aws-cdk": "^2.1129.0",
+    "aws-cdk-lib": "^2.169.0",
+    "constructs": "^10.0.0"
+  },
+  "packageManager": "npm@12.0.1"
+}

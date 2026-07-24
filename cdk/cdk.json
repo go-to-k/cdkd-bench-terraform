@@ -1,0 +1,14 @@
+{
+  "app": "node bin/app.ts",
+  "context": {
+    "@aws-cdk/core:checkSecretUsage": true,
+    "@aws-cdk/core:target-partitions": ["aws", "aws-cn"],
+    "@aws-cdk/aws-iam:minimizePolicies": true,
+    "@aws-cdk/core:enablePartitionLiterals": true,
+    "@aws-cdk/aws-s3:publicAccessBlockedByDefault": true,
+    "_comment_parity": "restrictDefaultSecurityGroup + useCdkManagedLogGroup intentionally OFF: they add a Lambda-backed custom resource + explicit LogGroups that terraform/main.tf does not create, which would unfairly inflate cdkd/cfn deploy time.",
+    "@aws-cdk/aws-ec2:restrictDefaultSecurityGroup": false,
+    "@aws-cdk/aws-lambda:useCdkManagedLogGroup": false,
+    "@aws-cdk/core:includePrefixInUniqueNameGeneration": true
+  }
+}

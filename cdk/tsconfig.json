@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "NodeNext",
+    "lib": ["ES2023"],
+    "declaration": false,
+    "strict": true,
+    "noImplicitReturns": true,
+    "inlineSourceMap": true,
+    "inlineSources": true,
+    "esModuleInterop": true,
+    "moduleResolution": "NodeNext",
+    "rewriteRelativeImportExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true
+  },
+  "exclude": ["node_modules", "cdk.out"]
+}
