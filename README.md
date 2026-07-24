@@ -35,7 +35,7 @@ still provisioned (and timed), but they tear down cleanly in ~1-2 min. A
 
 - AWS credentials (`aws sts get-caller-identity` works)
 - Node.js >= 20, `terraform` on PATH
-- cdkd built: `cd /Users/goto/pc/github/cdkd && vp run build` -> `dist/cli.js`
+- cdkd built: `cd ../cdkd && vp run build  # clone cdkd as a sibling dir` -> `dist/cli.js`
 
 ## Run
 

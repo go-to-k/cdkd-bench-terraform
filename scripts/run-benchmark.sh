@@ -9,7 +9,7 @@
 #
 # Env:
 #   AWS_REGION   (default us-east-1)
-#   CDKD_BIN     (default /Users/goto/pc/github/cdkd/dist/cli.js)
+#   CDKD_BIN     (default $(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/cdkd/dist/cli.js)
 #   RUNS         (default 3; the MEDIAN deploy time is reported)
 #   WIDE_COUNT   (wide scenario: N of each resource type; default 8)
 #
@@ -23,7 +23,7 @@ CDK_DIR="$ROOT/cdk"
 RESULTS_DIR="$ROOT/results"
 
 AWS_REGION="${AWS_REGION:-us-east-1}"; export AWS_REGION CDK_DEFAULT_REGION="$AWS_REGION"
-CDKD_BIN="${CDKD_BIN:-/Users/goto/pc/github/cdkd/dist/cli.js}"
+CDKD_BIN="${CDKD_BIN:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/cdkd/dist/cli.js}"
 RUNS="${RUNS:-3}"
 TOOLS="${1:-cdkd,cdkd-nowait,cfn,tf}"
 SCENARIO="${2:-webapp}"
