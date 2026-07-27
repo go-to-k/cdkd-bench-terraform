@@ -10,7 +10,7 @@ The same logical stack, expressed in CDK (deployed with `cdkd` and with
   download) is done in advance and **not** counted.
 - Region us-east-1 (CloudFront is global, so the cloudfront scenario is
   effectively region-independent).
-- cdkd version: includes the polling fixes from PR #1175 / #1176 (v0.260.x).
+- cdkd version: includes the polling fixes from PR #1175 / #1177 (v0.260.x).
 - Units are seconds. **Bold** marks the fastest tool for that scenario.
 
 ## Summary
@@ -76,7 +76,7 @@ The same logical stack, expressed in CDK (deployed with `cdkd` and with
 - **"cdkd is faster at everything" is not true.** webapp is a genuine tie with Terraform.
 - Across all three engines, CloudFormation is consistently the slowest.
 
-## Side effect: this benchmark actually made cdkd faster (PR #1175 / #1176)
+## Side effect: this benchmark actually made cdkd faster (PR #1175 / #1177)
 
 Digging into why cdkd was losing to Terraform on webapp surfaced **four real
 deploy-speed bugs, all since fixed**:
@@ -96,7 +96,7 @@ deploy-speed bugs, all since fixed**:
    30s. Lowering the cap to 10s turned cloudfront from a loss into a win.
 
 Four fixes shipped in #1175; a repo-wide sweep found the same pattern in seven more
-providers and shipped as #1176 (10s caps, a mechanical non-regression test, and
+providers and shipped as #1177 (10s caps, a mechanical non-regression test, and
 verification against real AWS). **The benchmark did not just rank the tools, it made
 cdkd faster.**
 
@@ -109,7 +109,7 @@ RUNS=3 ./scripts/run-benchmark.sh cdkd,tf webapp
 
 - Raw logs: `results/results-<scenario>-<ts>.md`
   - Every file records **the cdkd version it measured** in its header. Runs on
-    `0.260.7` and earlier predate the polling fixes (#1175 / #1176) and include
+    `0.260.7` and earlier predate the polling fixes (#1175 / #1177) and include
     runs where cdkd loses to Terraform (these are the "before" side of the section
     above). The summary table is measured on `0.260.10` and later. Raw data from
     both sides is kept, so the before/after is verifiable from this directory
