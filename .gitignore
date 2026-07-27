@@ -8,3 +8,7 @@ cdk/node_modules/
 terraform/.build/
 results/*.log
 !results/.gitkeep
+
+# unpublished blog handoff spec (kept local)
+BLOG_OUTLINE.md
+**/.build/
