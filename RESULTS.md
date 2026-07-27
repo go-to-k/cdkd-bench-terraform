@@ -20,7 +20,7 @@ The same logical stack, expressed in CDK (deployed with `cdkd` and with
 | **wide** | 48 independent resources (S3/DDB/SQS/SNS/SSM/Logs x8 each) | **25.4** | 25.3 | 50.4 | 85.9 |
 | **serverless** | Lambda x3 + HTTP API + DDB + SNS/SQS + EventBridge | **31.4** | 31.8 | 57.9 | 124.2 |
 | **webapp** | VPC + NAT + subnets + gateway endpoints + DDB + SQS + S3 + Lambda x2 + HTTP API | 127.0 | **32.4** | 127.8 | 161.9 |
-| **cloudfront** | S3 origin + CloudFront + OAC | **171.2** | 17.8 | 191.1 | 208.1 |
+| **cloudfront** | S3 origin + CloudFront + OAC | **171.2** | **17.8** | 191.1 | 208.1 |
 
 > **The cdkd column was verified on v0.260.10** (which includes the #1181
 > deploy-overhead optimization). The Terraform and CloudFormation columns are
