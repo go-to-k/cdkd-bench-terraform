@@ -74,6 +74,10 @@ RUNS=3 ./scripts/run-benchmark.sh cdkd,tf webapp
 ```
 
 - 生ログ: `results/*.log` / `results/results-<scenario>-<ts>.md`
+  - 各ファイルのヘッダに**計測時の cdkd バージョン**を記録している。`0.260.7` 以前のランは
+    ポーリング修正(#1175 / #1176)**前**の値で、cdkd が Terraform に負けているものがある
+    (上記「副産物」セクションの before に相当)。上の総合結果表は `0.260.10` 以降で計測した値。
+    修正前後の生データを両方残してあるので、before/after はこのディレクトリで検証できる。
 - CDK: `cdk/lib/*-stack.ts` / Terraform: `terraform/<scenario>/`
 
 ## 注意点(信頼性のため)
