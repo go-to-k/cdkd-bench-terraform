@@ -1,89 +1,131 @@
-# ベンチマーク結果まとめ: cdkd vs Terraform vs CloudFormation
+# Benchmark results: cdkd vs Terraform vs CloudFormation
 
-同一の論理スタックを CDK(cdkd / `cdk deploy`)と Terraform で表現し、デプロイ速度を比較。
+The same logical stack, expressed in CDK (deployed with `cdkd` and with
+`cdk deploy`) and in Terraform, compared on deploy speed.
 
-## 計測条件
+## Method
 
-- 指標: **cold end-to-end デプロイ壁時計、median of 3 ラン**
-- 一回きりのセットアップ(`npm install` / `cdk bootstrap` / `terraform init` / プロバイダー DL)は事前実施、計測に**含めない**
-- リージョン: us-east-1(cloudfront は CloudFront がグローバルなため実質同等)
-- cdkd バージョン: ポーリング修正込み(PR #1175 / #1176 → v0.260.x)
-- 単位: 秒。`**太字**`=そのシナリオ最速。
+- Metric: **cold end-to-end deploy wall-time, median of 3 runs**.
+- One-time setup (`npm install`, `cdk bootstrap`, `terraform init`, provider
+  download) is done in advance and **not** counted.
+- Region us-east-1 (CloudFront is global, so the cloudfront scenario is
+  effectively region-independent).
+- cdkd version: includes the polling fixes from PR #1175 / #1176 (v0.260.x).
+- Units are seconds. **Bold** marks the fastest tool for that scenario.
 
-## 総合結果表
+## Summary
 
-| シナリオ | 構成 | cdkd | cdkd `--no-wait` | Terraform | CloudFormation |
+| Scenario | Shape | cdkd | cdkd `--no-wait` | Terraform | CloudFormation |
 |---|---|---:|---:|---:|---:|
-| **wide** | 独立48リソース(S3/DDB/SQS/SNS/SSM/Logs ×8) | **25.4** | 25.3 | 50.4 | 85.9 |
-| **serverless** | Lambda×3 + HTTP API + DDB + SNS/SQS + EventBridge | **31.4** | 31.8 | 57.9 | 124.2 |
-| **webapp** | VPC + NAT + サブネット + GWエンドポイント + DDB + SQS + S3 + Lambda×2 + HTTP API | 127.0 | **32.4** | 127.8 | 161.9 |
-| **cloudfront** | S3 オリジン + CloudFront + OAC | **171.2** | 17.8 | 191.1 | 208.1 |
+| **wide** | 48 independent resources (S3/DDB/SQS/SNS/SSM/Logs x8 each) | **25.4** | 25.3 | 50.4 | 85.9 |
+| **serverless** | Lambda x3 + HTTP API + DDB + SNS/SQS + EventBridge | **31.4** | 31.8 | 57.9 | 124.2 |
+| **webapp** | VPC + NAT + subnets + gateway endpoints + DDB + SQS + S3 + Lambda x2 + HTTP API | 127.0 | **32.4** | 127.8 | 161.9 |
+| **cloudfront** | S3 origin + CloudFront + OAC | **171.2** | 17.8 | 191.1 | 208.1 |
 
-> **cdkd 列は v0.260.10(#1181 deploy オーバーヘッド最適化込み)で検証。TF/CFn 列は前回値据え置き**
-> (cdkd のバイナリに依存しないツール)。
-> - **wide**: v0.260.10 で単独クリーン再計測 26.0 → **25.4s**(~0.6s短縮)。
-> - **serverless/webapp/cloudfront**: v0.260.10 でも再計測したが、**A の固定コスト削減(毎回~1.7s)は
->   これらプロビジョニング律速スタックではラン変動未満**(例: cloudfront 173.9 vs 元 171.2 = CloudFront 伝播
->   律速で誤差内)。よって元のクリーン値を採用。#1181 の主効果は単一/小規模スタックのイテレーション側
->   (AgentCore 単一リソースの container update 31.4→29.7s)。
-> - 注: 一度これらを**並行実行**して数値が膨張したため(webapp 127→136s 等)、干渉値は破棄し、比較は
->   元のクリーン値 or 単独再計測値のみ採用している。
+> **The cdkd column was verified on v0.260.10** (which includes the #1181
+> deploy-overhead optimization). The Terraform and CloudFormation columns are
+> carried over, since neither depends on the cdkd binary.
+>
+> - **wide**: re-measured cleanly on v0.260.10, 26.0 to **25.4s** (about 0.6s faster).
+> - **serverless / webapp / cloudfront**: also re-measured on v0.260.10, but the
+>   fixed-cost saving (about 1.7s per deploy) is **smaller than run-to-run
+>   variance** on these provisioning-bound stacks. For example cloudfront came
+>   out at 173.9 vs the original 171.2, which is within the noise of CloudFront
+>   propagation. The original clean values are therefore kept. The optimization
+>   shows up on small, single-resource iteration instead.
+> - Note: an earlier attempt ran these scenarios **concurrently**, which inflated
+>   the numbers (webapp 127 to 136s, for example). Those contaminated values were
+>   discarded; only clean values measured in isolation are reported.
 
-## 各ラン詳細(median / 全ラン)
+## Per-run detail (median / all runs)
 
-| シナリオ | ツール | median | 全ラン |
+| Scenario | Tool | median | all runs |
 |---|---|---:|---|
 | webapp | cdkd | 127.0 | 113 / 141 / 127 |
 | webapp | Terraform | 127.8 | 128 / 159 / 118 |
 | webapp | CloudFormation | 161.9 | 162 / 158 / 164 |
 | webapp | cdkd --no-wait | 32.4 | 29.1 / 32.4 / 33.4 |
 | cloudfront | cdkd | 171.2 | 171.2 / 184.8 / 163.1 |
-| cloudfront | Terraform | 191.1 | 182.5 / (1996.8 TF側ハング=除外) / 191.1 |
+| cloudfront | Terraform | 191.1 | 182.5 / (1996.8, Terraform-side hang, excluded) / 191.1 |
 | cloudfront | CloudFormation | 208.1 | 200.8 / 208.1 / 232.4 |
 | cloudfront | cdkd --no-wait | 17.8 | 15.0 / 17.8 / 18.2 |
 
-## シナリオ別の要点
+## Scenario notes
 
-- **wide(cdkd 単独最速、TF比 ~2倍 / CFn比 ~3.3倍)**: 横に広く並列なスタックでは cdkd の DAG + SDK 直接呼び出しが低変動で明確に勝つ。
-- **serverless(cdkd 単独最速、TF比 ~1.8倍 / CFn比 ~4倍)**: 依存チェーンはあるが遅いリソースがないので wide 同様に cdkd が勝つ。`--no-wait` は効果なし(スキップ対象がない)。
-- **webapp(cdkd ≒ Terraform の同着、0.8s差)**: NAT Gateway(~90〜120s)が全ツール共通の床で差を圧縮。物理に律速されるので cdkd も TF も単独では勝てない。`--no-wait`(NAT待ちスキップ)だけが 32.4s で別次元。
-- **cloudfront(cdkd が Terraform に勝ち)**: CloudFront 伝播(~180s+、変動大)が支配。ポーリング修正後、cdkd 171.2s が TF ~186s(ハング除く)と CFn 208.1s を上回る(cdkd < TF < CFn)。`--no-wait` は 17.8s(15.0 / 17.8 / 18.2、CloudFront 伝播待ちをスキップ)。
+- **wide (cdkd fastest, about 2x Terraform and 3.3x CloudFormation)**: on a wide,
+  highly parallel stack, cdkd's DAG plus direct SDK calls win clearly and with
+  low variance.
+- **serverless (cdkd fastest, about 1.8x Terraform and 4x CloudFormation)**: there
+  are real dependency chains but no slow resources, so cdkd wins the same way it
+  does on wide. `--no-wait` makes no difference here (nothing to skip).
+- **webapp (cdkd and Terraform are a genuine tie, 0.8s apart)**: the NAT Gateway
+  (about 90 to 120s) is a floor every tool pays, which compresses the difference.
+  Neither cdkd nor Terraform can win against physics on its own. Only `--no-wait`,
+  which skips the NAT stabilization wait, lands in a different league at 32.4s.
+- **cloudfront (cdkd beats Terraform)**: CloudFront propagation (180s+, high
+  variance) dominates. After the polling fixes, cdkd's 171.2s beats Terraform's
+  ~186s (excluding the hung run) and CloudFormation's 208.1s, so cdkd < TF < CFn.
+  `--no-wait` is 17.8s (15.0 / 17.8 / 18.2) because it skips the propagation wait.
 
-## 結論(正直に)
+## Conclusions, honestly
 
-- **勝者はスタックの「形」で変わる。** 並列型(wide / serverless)は cdkd の明確な勝ち。単一の遅いリソース支配型(webapp=NAT / cloudfront)は物理が支配し、同着〜僅差。待たない選択(`--no-wait`)だけが物理を超える。
-- **「cdkd が全部速い」ではない。** webapp は Terraform と真の同着。
-- 3エンジンとも比較で、CloudFormation は常に最も遅い(税が乗る)。
+- **The winner depends on the shape of the stack.** Parallel-shaped stacks (wide,
+  serverless) are a clear cdkd win. Stacks dominated by a single slow resource
+  (webapp's NAT, cloudfront's propagation) are governed by physics, so the result
+  is a tie or a narrow margin. Only choosing not to wait (`--no-wait`) beats physics.
+- **"cdkd is faster at everything" is not true.** webapp is a genuine tie with Terraform.
+- Across all three engines, CloudFormation is consistently the slowest.
 
-## 副産物: このベンチが cdkd を実際に速くした(PR #1175 / #1176)
+## Side effect: this benchmark actually made cdkd faster (PR #1175 / #1176)
 
-webapp で Terraform に負けていた原因を掘って、**実デプロイ速度バグを4つ発見・修正**:
+Digging into why cdkd was losing to Terraform on webapp surfaced **four real
+deploy-speed bugs, all since fixed**:
 
-1. **longest-pole スケジューリング**: ready セットを「推移的依存の多い順」に。依存ゼロの EIP が後回しにされ NAT(長い pole)を遅らせていた。webapp 高速ラン 154s→112s。
-2. **EIP SDK プロバイダー**: EIP が CC-API 経由で非同期ポーリング ~23s → ネイティブ SDK(AllocateAddress)で ~2.4s。
-3. **NAT ポーリング間隔**: SDK waiter の既定 `minDelay:15s/maxDelay:120s` が疎すぎ、検出が最大~2分遅延 → `minDelay:5/maxDelay:15` に。webapp が負け(190s)→同着(127s)へ。
-4. **CloudFront ポーリング間隔**: 手書きループの上限 30s → 10s。cloudfront が負け→勝ちへ。
+1. **Longest-pole scheduling**: the ready set was ordered by template logical id.
+   An EIP with no dependencies was scheduled late, which delayed the NAT Gateway
+   (the long pole) behind it. Ordering by transitive dependency count instead took
+   a fast webapp run from 154s to 112s.
+2. **EIP SDK provider**: the EIP went through the Cloud Control API, whose async
+   polling backoff cost about 23s for a resource AWS allocates instantly. A native
+   EC2 SDK provider (AllocateAddress) brought it to about 2.4s.
+3. **NAT polling interval**: the SDK waiter's default backoff (`minDelay: 15s`,
+   `maxDelay: 120s`) was far too sparse, delaying detection of "available" by up
+   to about 2 minutes. Overriding it to `minDelay: 5, maxDelay: 15` moved webapp
+   from a loss (190s) to a tie (127s).
+4. **CloudFront polling interval**: a hand-written wait loop capped its backoff at
+   30s. Lowering the cap to 10s turned cloudfront from a loss into a win.
 
-→ #1175 で4つ出荷、全リポ掃引で見つけた同型を #1176(残り7プロバイダー、10s 化 + 機械的非回帰テスト、実AWS integ 検証)として出荷済み。**ベンチは順位付けだけでなく cdkd を速くした。**
+Four fixes shipped in #1175; a repo-wide sweep found the same pattern in seven more
+providers and shipped as #1176 (10s caps, a mechanical non-regression test, and
+verification against real AWS). **The benchmark did not just rank the tools, it made
+cdkd faster.**
 
-## 再現
+## Reproducing
 
 ```bash
-./scripts/run-benchmark.sh cdkd,cdkd-nowait,cfn,tf wide   # または webapp / serverless / cloudfront
+./scripts/run-benchmark.sh cdkd,cdkd-nowait,cfn,tf wide   # or webapp / serverless / cloudfront
 RUNS=3 ./scripts/run-benchmark.sh cdkd,tf webapp
 ```
 
-- 生ログ: `results/*.log` / `results/results-<scenario>-<ts>.md`
-  - 各ファイルのヘッダに**計測時の cdkd バージョン**を記録している。`0.260.7` 以前のランは
-    ポーリング修正(#1175 / #1176)**前**の値で、cdkd が Terraform に負けているものがある
-    (上記「副産物」セクションの before に相当)。上の総合結果表は `0.260.10` 以降で計測した値。
-    修正前後の生データを両方残してあるので、before/after はこのディレクトリで検証できる。
-- CDK: `cdk/lib/*-stack.ts` / Terraform: `terraform/<scenario>/`
+- Raw logs: `results/results-<scenario>-<ts>.md`
+  - Every file records **the cdkd version it measured** in its header. Runs on
+    `0.260.7` and earlier predate the polling fixes (#1175 / #1176) and include
+    runs where cdkd loses to Terraform (these are the "before" side of the section
+    above). The summary table is measured on `0.260.10` and later. Raw data from
+    both sides is kept, so the before/after is verifiable from this directory
+    rather than only from the summary.
+- CDK: `cdk/lib/*-stack.ts`. Terraform: `terraform/<scenario>/`.
 
-## 注意点(信頼性のため)
+## Caveats (for credibility)
 
-- パリティ調整: CDK 固有の `restrictDefaultSecurityGroup` カスタムリソース + CDK 管理 LogGroups を無効化(Terraform にない分を cdkd/CFn が背負わないよう)。serverless は Terraform 側の SQS receive 権限欠落を補って一致。
-- `terraform apply` は plan を、`cdk/cdkd deploy` は synth を各自含む。end-to-end 壁時計が apples-to-apples。
-- NAT/CloudFront は実プロビジョニング時間で変動 → median of 3。
-- SQS は 60s 名前再利用クールダウンあり(AWS 制約、ツールの欠陥ではない)。
-- cdkd は実験的 / dev-test。
+- Parity adjustments: CDK's `restrictDefaultSecurityGroup` custom resource and
+  CDK-managed LogGroups are disabled, so cdkd and CloudFormation are not carrying
+  resources Terraform does not have. On serverless, the Terraform configuration
+  was corrected to grant the consumer Lambda the SQS receive permission that the
+  CDK `SqsEventSource` adds automatically.
+- `terraform apply` includes its own plan, and `cdk` / `cdkd deploy` include their
+  own synth. End-to-end wall-time is the apples-to-apples number.
+- NAT and CloudFront timings vary with actual AWS provisioning time, hence median
+  of 3.
+- SQS has a 60s name-reuse cooldown. That is an AWS constraint, not a tool defect.
+- cdkd is experimental and intended for dev/test workflows.
