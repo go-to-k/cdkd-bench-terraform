@@ -12,6 +12,31 @@ The same logical stack, expressed in CDK (deployed with `cdkd` and with
   effectively region-independent).
 - cdkd version: includes the polling fixes from PR #1175 / #1177 (v0.260.x).
 - Units are seconds. **Bold** marks the fastest tool for that scenario.
+- **Every row compares tools whose completion definition matches.** Where a tool
+  offers both a waiting and a non-waiting mode for the resource that dominates
+  the scenario, both are measured. Where it offers only one, the table says
+  `N/A` rather than leaving the cell blank, so that "cannot do this" stays
+  distinguishable from "was not measured".
+
+### What "done" means, per tool
+
+cdkd is template-compatible with CloudFormation but deliberately **not**
+wait-semantics-identical: the completion definition is decided per resource
+type and documented (`docs/cli-reference.md` in the cdkd repo has the full
+table). Where CloudFormation and Terraform agree, cdkd matches them. Where they
+disagree, cdkd's default takes the definition that suits dev/test iteration and
+`--full-wait` opts into the CloudFormation one.
+
+That cuts both ways, and this table shows both directions:
+
+- **It made cdkd slower on ALB-bearing stacks.** cdkd used to return as soon as
+  `CreateLoadBalancer` returned, while CloudFormation and Terraform both wait
+  for the load balancer to reach `active`. cdkd now waits too, which costs
+  90-180s on any stack with an ALB. The ecs row below pays it.
+- **It kept cdkd fast on ECS Services.** CloudFormation waits for steady state;
+  Terraform's `wait_for_steady_state` defaults to false. cdkd keeps the
+  fire-and-forget default and offers `--full-wait` as the opt-in, which is the
+  same choice Terraform gives its users.
 
 ## Summary
 
