@@ -95,11 +95,17 @@ NW_STACK="${STACK}Nw"
 FW_STACK="${STACK}Fw"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
-info(){ echo -e "${BLUE}[INFO]${NC}  $*"; }
-ok(){ echo -e "${GREEN}[OK]${NC}    $*"; }
-warn(){ echo -e "${YELLOW}[WARN]${NC}  $*"; }
-err(){ echo -e "${RED}[ERROR]${NC} $*"; }
-phase(){ echo -e "${CYAN}>>> $*${NC}"; }
+# Every log helper writes to STDERR, not stdout. The time_* functions are
+# invoked inside a command substitution whose stdout IS the measured value, so a
+# helper writing to stdout would splice its text into the number: a failed run
+# made `fmt` evaluate `print('N/A' if [ERROR]...)` and crash with a Python
+# SyntaxError instead of reporting the failure. Only the bare `echo "$ms"` /
+# `echo 0` lines in time_* may write to stdout.
+info(){ echo -e "${BLUE}[INFO]${NC}  $*" >&2; }
+ok(){ echo -e "${GREEN}[OK]${NC}    $*" >&2; }
+warn(){ echo -e "${YELLOW}[WARN]${NC}  $*" >&2; }
+err(){ echo -e "${RED}[ERROR]${NC} $*" >&2; }
+phase(){ echo -e "${CYAN}>>> $*${NC}" >&2; }
 now_ms(){ python3 -c 'import time;print(int(time.time()*1000))'; }
 fmt(){ python3 -c "print('N/A' if $1==0 else f'{$1/1000:.1f}s')"; }
 median(){ python3 -c "import sys,statistics as s; xs=[int(x) for x in sys.argv[1:] if int(x)>0]; print(int(s.median(xs)) if xs else 0)" "$@"; }
@@ -141,7 +147,7 @@ time_cdkd(){ # $1 = extra flag (--no-wait / --full-wait / empty), $2 = log, $3 =
   local t; t=$(now_ms)
   (cd "$CDK_DIR" && node "$CDKD_BIN" deploy --app "node bin/app.ts" $1 "$stk" >"$2" 2>&1); local rc=$?
   local ms=$(( $(now_ms)-t )); cdkd_destroy "$stk"
-  [[ $rc -ne 0 ]] && { err "cdkd $1 rc=$rc (see $2)"; tail -12 "$2"; echo 0; return; }
+  [[ $rc -ne 0 ]] && { err "cdkd $1 rc=$rc (see $2)"; tail -12 "$2" >&2; echo 0; return; }
   echo "$ms"
 }
 time_cfn(){
@@ -149,7 +155,7 @@ time_cfn(){
   local t=$(now_ms)
   (cd "$CDK_DIR" && npx cdk deploy "$STACK" --require-approval never >"$1" 2>&1); local rc=$?
   local ms=$(( $(now_ms)-t )); cfn_destroy
-  [[ $rc -ne 0 ]] && { err "cfn rc=$rc"; tail -12 "$1"; echo 0; return; }
+  [[ $rc -ne 0 ]] && { err "cfn rc=$rc"; tail -12 "$1" >&2; echo 0; return; }
   echo "$ms"
 }
 time_tf(){ # $1 = log, $2.. = extra -var flags for the completion mode under test
@@ -158,7 +164,7 @@ time_tf(){ # $1 = log, $2.. = extra -var flags for the completion mode under tes
   local t=$(now_ms)
   (cd "$TF_DIR" && terraform apply -auto-approve -input=false "${TF_VARS[@]}" "$@" >"$log" 2>&1); local rc=$?
   local ms=$(( $(now_ms)-t )); tf_destroy "$@"
-  [[ $rc -ne 0 ]] && { err "tf rc=$rc"; tail -12 "$log"; echo 0; return; }
+  [[ $rc -ne 0 ]] && { err "tf rc=$rc"; tail -12 "$log" >&2; echo 0; return; }
   echo "$ms"
 }
 
