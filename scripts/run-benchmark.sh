@@ -84,7 +84,7 @@ case "$SCENARIO" in
     CDKD_FULLWAIT_NA="$NO_SERVICE_NA";;
   ecs)
     STACK="BenchEcs"; TF_DIR="$ROOT/terraform/ecs"; TF_VARS=(-var "region=$AWS_REGION")
-    TF_NOWAIT_NA="Terraform's DEFAULT is already fire-and-forget (wait_for_steady_state=false); see the tf row"
+    TF_NOWAIT_NA="aws_lb has no wait opt-out, and the service's fire-and-forget mode IS Terraform's default (see the tf row)"
     TF_FULLWAIT_VARS=(-var "wait_for_steady_state=true");;
   *) echo "unknown scenario: $SCENARIO (webapp|wide|serverless|cloudfront|ec2|ecs)"; exit 1;;
 esac
@@ -165,12 +165,19 @@ time_tf(){ # $1 = log, $2.. = extra -var flags for the completion mode under tes
 # row <label> <median> <reason-when-N/A> <all-run values...>
 row(){
   local label="$1" med="$2" na_reason="$3"; shift 3
-  if [[ "$med" -eq 0 && -n "$na_reason" ]]; then
-    echo "| $label | N/A | $na_reason |"
-  else
-    local all=""; for x in "$@"; do all+="$(fmt "$x") "; done
-    echo "| $label | $(fmt "$med") | $all |"
+  # median() drops failed (zero) runs, so a zero median means EVERY run failed.
+  # Keep that distinct from N/A: "the tool has no such mode" and "the tool has
+  # the mode and it did not work" are different facts.
+  if [[ "$med" -eq 0 ]]; then
+    if [[ -n "$na_reason" ]]; then
+      echo "| $label | N/A | $na_reason |"
+    else
+      echo "| $label | FAILED | every run returned non-zero; see results/*.log |"
+    fi
+    return
   fi
+  local all=""; for x in "$@"; do all+="$(fmt "$x") "; done
+  echo "| $label | $(fmt "$med") | $all |"
 }
 
 report(){
