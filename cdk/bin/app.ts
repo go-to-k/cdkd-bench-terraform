@@ -4,6 +4,8 @@ import { WebAppStack } from '../lib/web-app-stack.ts';
 import { WideStack } from '../lib/wide-stack.ts';
 import { ServerlessStack } from '../lib/serverless-stack.ts';
 import { CloudFrontStack } from '../lib/cloudfront-stack.ts';
+import { Ec2Stack } from '../lib/ec2-stack.ts';
+import { EcsStack } from '../lib/ecs-stack.ts';
 
 const app = new cdk.App();
 const env = { region: process.env.AWS_REGION ?? 'us-east-1' };
@@ -14,6 +16,8 @@ new WebAppStack(app, 'BenchWebApp', { env });
 new WideStack(app, 'BenchWide', { env });
 new ServerlessStack(app, 'BenchServerless', { env });
 new CloudFrontStack(app, 'BenchCloudFront', { env });
+new Ec2Stack(app, 'BenchEc2', { env });
+new EcsStack(app, 'BenchEcs', { env });
 
 // `*Nw` twins are deployed by the `cdkd --no-wait` tool ONLY. Distinct stack
 // name => distinct cdkd-generated resource names, so measuring cdkd and
@@ -23,3 +27,11 @@ new WebAppStack(app, 'BenchWebAppNw', { env });
 new WideStack(app, 'BenchWideNw', { env });
 new ServerlessStack(app, 'BenchServerlessNw', { env });
 new CloudFrontStack(app, 'BenchCloudFrontNw', { env });
+new Ec2Stack(app, 'BenchEc2Nw', { env });
+new EcsStack(app, 'BenchEcsNw', { env });
+
+// `*Fw` twins are deployed by the `cdkd --full-wait` tool ONLY, for the same
+// name-collision reason: the ecs scenario's ALB is deleted asynchronously, so
+// reusing one stack for the default and --full-wait runs risks a
+// DuplicateLoadBalancerName on the second create.
+new EcsStack(app, 'BenchEcsFw', { env });
