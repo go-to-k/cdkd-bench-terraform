@@ -64,13 +64,13 @@ case "$SCENARIO" in
     CDKD_FULLWAIT_NA="$NO_SERVICE_NA";;
   wide)
     STACK="BenchWide"; TF_DIR="$ROOT/terraform/wide"; TF_VARS=(-var "region=$AWS_REGION" -var "count_each=$WIDE_COUNT")
-    TF_NOWAIT_NA="no resource in this stack has a stabilization wait"
-    TF_FULLWAIT_NA="no resource in this stack has a stabilization wait"
+    TF_NOWAIT_NA="no resource in this stack exposes a wait opt-out"
+    TF_FULLWAIT_NA="Terraform already waits for every resource here"
     CDKD_FULLWAIT_NA="$NO_SERVICE_NA";;
   serverless)
     STACK="BenchServerless"; TF_DIR="$ROOT/terraform/serverless"; TF_VARS=(-var "region=$AWS_REGION")
-    TF_NOWAIT_NA="no resource in this stack has a stabilization wait"
-    TF_FULLWAIT_NA="no resource in this stack has a stabilization wait"
+    TF_NOWAIT_NA="no resource in this stack exposes a wait opt-out"
+    TF_FULLWAIT_NA="Terraform already waits for every resource here"
     CDKD_FULLWAIT_NA="$NO_SERVICE_NA";;
   cloudfront)
     STACK="BenchCloudFront"; TF_DIR="$ROOT/terraform/cloudfront"; TF_VARS=(-var "region=$AWS_REGION")
@@ -91,8 +91,40 @@ esac
 # The non-default cdkd modes deploy DISTINCT twin stacks so their resource
 # names never collide with the plain-cdkd stack's (SQS's 60s name-reuse
 # cooldown, ELBv2's asynchronous delete).
-NW_STACK="${STACK}Nw"
-FW_STACK="${STACK}Fw"
+TF_VARS_BASE=("${TF_VARS[@]}")
+STACK_BASE="$STACK"
+NW_STACK="${STACK_BASE}Nw"
+FW_STACK="${STACK_BASE}Fw"
+TF_PREFIX_BASE="$(cd "$TF_DIR" && grep -A2 'variable "prefix"' main.tf | grep -oE 'default *= *"[^"]+"' | head -1 | sed 's/.*"\(.*\)"/\1/')"
+[[ -z "$TF_PREFIX_BASE" ]] && { echo "could not read the prefix default from $TF_DIR/main.tf"; exit 1; }
+
+# COLD=1 (the default) gives every RUN of every TOOL resource names AWS has
+# never seen, so each run measures a first deploy.
+#
+# This is not cosmetic. Re-creating an IAM instance profile under a previously
+# used name propagates to EC2 about 5x faster than a fresh one (measured:
+# 7.9s median cold, 1.5s median warm). A fixed-name benchmark therefore
+# measures a warmed-up AWS from run 2 onward -- and not neutrally, because
+# cdkd waits for the real propagation while Terraform pays a fixed ~7-8s wait
+# inside `aws_iam_instance_profile` regardless. Fixed names quietly handed
+# cdkd an advantage no first deploy ever sees.
+#
+# COLD=0 restores the old fixed-name behaviour (the repeat-deploy / CI-loop
+# case), which is a legitimate thing to measure -- just not the same thing.
+COLD="${COLD:-1}"
+cold_suffix(){ [[ "$COLD" == 1 ]] && python3 -c 'import uuid;print("C"+uuid.uuid4().hex[:6])' || echo ""; }
+
+# Re-stamp every tool's names for the run about to start. cdkd/cdk read
+# BENCH_SUFFIX (see cdk/bin/app.ts); Terraform reads -var prefix.
+restamp(){
+  local suf; suf="$(cold_suffix)"
+  export BENCH_SUFFIX="$suf"
+  STACK="${STACK_BASE}${suf}"
+  NW_STACK="${STACK_BASE}Nw${suf}"
+  FW_STACK="${STACK_BASE}Fw${suf}"
+  TF_VARS=("${TF_VARS_BASE[@]}")
+  [[ -n "$suf" ]] && TF_VARS+=(-var "prefix=${TF_PREFIX_BASE}-${suf,,}")
+}
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
 # Every log helper writes to STDERR, not stdout. The time_* functions are
@@ -220,7 +252,8 @@ report(){
 main(){
   setup
   for ((i=1;i<=RUNS;i++)); do
-    info "=== run $i/$RUNS ($SCENARIO) ==="
+    restamp
+    info "=== run $i/$RUNS ($SCENARIO) ===${BENCH_SUFFIX:+ [cold: $BENCH_SUFFIX]}"
     has cdkd          && { phase "cdkd (run $i)";               CDKD_T+=("$(time_cdkd '' "$RESULTS_DIR/cdkd-$SCENARIO.log")");                       ok "cdkd $(fmt ${CDKD_T[-1]})"; }
     has cdkd-nowait   && { phase "cdkd --no-wait (run $i)";     NOWAIT_T+=("$(time_cdkd '--no-wait' "$RESULTS_DIR/nowait-$SCENARIO.log" "$NW_STACK")"); ok "cdkd --no-wait $(fmt ${NOWAIT_T[-1]})"; }
     if has cdkd-fullwait; then
