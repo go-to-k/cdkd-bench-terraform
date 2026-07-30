@@ -76,7 +76,12 @@ case "$SCENARIO" in
     STACK="BenchCloudFront"; TF_DIR="$ROOT/terraform/cloudfront"; TF_VARS=(-var "region=$AWS_REGION")
     TF_NOWAIT_VARS=(-var "wait_for_deployment=false")
     TF_FULLWAIT_NA="Terraform's default already waits for Deployed"
-    CDKD_FULLWAIT_NA="$NO_SERVICE_NA";;
+    # cdkd >= 0.271 (cdkd#1282): the Distribution default is fire-and-forget
+    # and --full-wait opts into the Deployed wait, so cdkd-fullwait is a real,
+    # distinct mode here (empty NA = measured). The two-row completion form:
+    #   fire and forget : cdkd (default)     vs tf-nowait (wait_for_deployment=false)
+    #   Deployed        : cdkd --full-wait   vs tf (default)
+    CDKD_FULLWAIT_NA="";;
   ec2)
     STACK="BenchEc2"; TF_DIR="$ROOT/terraform/ec2"; TF_VARS=(-var "region=$AWS_REGION")
     TF_NOWAIT_NA="aws_instance has no wait opt-out"
