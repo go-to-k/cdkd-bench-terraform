@@ -18,11 +18,23 @@ The same logical stack, expressed in CDK (deployed with `cdkd` and with
   effectively region-independent).
 - Every number here comes from ONE cdkd binary in one measurement campaign.
 - Units are seconds. **Bold** marks the fastest tool for that scenario.
-- **Differences of a few seconds are not meaningful.** Re-running the same
-  scenario with the same binary hours later moved the cdkd median by 1.1s on
-  wide and 4.5s on serverless (Terraform moved too, in the opposite direction
-  on serverless). Treat single-digit-second gaps as ties regardless of which
-  side they favour.
+- **A median gap only counts when the two run distributions actually
+  separate.** Reported per row below as either "separated" (no cdkd run
+  overlaps any Terraform run; exact Mann-Whitney p = 0.0006, the floor at
+  n=7 vs n=7) or "overlapping" (the ranges intersect, so n=7 cannot tell the
+  two apart whatever the medians say).
+
+  Judging by the size of the median gap instead does not work, and gets it
+  wrong in both directions here: ec2 separates completely on a 6.8s gap
+  (slowest cdkd run 32.9s, fastest Terraform run 35.7s), while webapp's much
+  larger 17.6s gap sits inside two heavily overlapping ranges and is NOT
+  distinguishable (p = 0.24). Raw seconds are the wrong unit; NAT-gateway
+  variance swamps a bigger gap than EC2-instance variance does a smaller one.
+
+  "Overlapping" means unproven at this sample size, not disproven. Re-running
+  the same scenario with the same binary hours later also moved the cdkd
+  median by 1.1s on wide and 4.5s on serverless, so sub-second precision is
+  not on offer anywhere.
 - **Every row compares tools whose completion definition matches.** Where a tool
   offers both a waiting and a non-waiting mode for the resource that dominates
   the scenario, both are measured. Where it offers only one, the table says
@@ -87,18 +99,21 @@ document reports first deploys.
 
 ## Summary
 
-| Scenario | Shape | cdkd | cdkd `--no-wait` | Terraform | CloudFormation |
-|---|---|---:|---:|---:|---:|
-| **wide** | 48 independent resources (S3/DDB/SQS/SNS/SSM/Logs x8 each) | **20.0** | 21.1 | 46.1 | 89.1 |
-| **serverless** | Lambda x3 + HTTP API + DDB + SNS/SQS + EventBridge | **25.9** | 24.6 | 57.5 | 127.1 |
-| **ec2** | VPC + subnet + SG + IAM role + EC2 instance x3 (t3.micro + EBS) | **29.1** | 22.0 | 35.9 | 193.9 |
-| **webapp** | VPC + NAT + subnets + gateway endpoints + DDB + SQS + S3 + Lambda x2 + HTTP API | **109.7** | 23.4 | 127.3 | 166.1 |
-| **ecs** | VPC 2AZ + Fargate cluster/task/service + ALB + target group | **162.8** | 34.5 | 209.5 | 276.7 |
-| **cloudfront** | S3 origin + CloudFront + OAC | **174.7** | 13.1 | 177.5 | 209.8 |
+| Scenario | Shape | cdkd | cdkd `--no-wait` | Terraform | CloudFormation | vs Terraform |
+|---|---|---:|---:|---:|---:|---|
+| **wide** | 48 independent resources (S3/DDB/SQS/SNS/SSM/Logs x8 each) | **20.0** | 21.1 | 46.1 | 89.1 | 2.31x, separated |
+| **serverless** | Lambda x3 + HTTP API + DDB + SNS/SQS + EventBridge | **25.9** | 24.6 | 57.5 | 127.1 | 2.22x, separated |
+| **ec2** | VPC + subnet + SG + IAM role + EC2 instance x3 (t3.micro + EBS) | **29.1** | 22.0 | 35.9 | 193.9 | 1.23x, separated |
+| **webapp** | VPC + NAT + subnets + gateway endpoints + DDB + SQS + S3 + Lambda x2 + HTTP API | 109.7 | 23.4 | 127.3 | 166.1 | median favours cdkd, overlapping |
+| **ecs** | VPC 2AZ + Fargate cluster/task/service + ALB + target group | **162.8** | 34.5 | 209.5 | 276.7 | 1.29x, separated |
+| **cloudfront** | S3 origin + CloudFront + OAC | 174.7 | 13.1 | 177.5 | 209.8 | tie |
 
-cdkd is faster than Terraform in five of the six scenarios (1.16x to 2.31x)
-and ties on the sixth. It is faster than CloudFormation everywhere, by 1.7x
-to 4.9x.
+cdkd is clearly faster than Terraform in four of the six scenarios -- wide
+2.31x, serverless 2.22x, ecs 1.29x, ec2 1.23x, each with completely separated
+run distributions. Of the remaining two, webapp's median favours cdkd by
+17.6s but its runs overlap Terraform's too much for n=7 to separate them, and
+cloudfront is a tie. **No scenario is slower.** Against CloudFormation cdkd is
+faster everywhere, by 1.7x to 4.9x.
 
 The pattern is the point: **cdkd's lead is largest where the wall-clock is
 dominated by orchestration, and vanishes where it is dominated by AWS-side
