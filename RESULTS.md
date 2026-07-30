@@ -106,14 +106,27 @@ document reports first deploys.
 | **ec2** | VPC + subnet + SG + IAM role + EC2 instance x3 (t3.micro + EBS) | **29.1** | 22.0 | 35.9 | 193.9 | 1.23x, separated |
 | **webapp** | VPC + NAT + subnets + gateway endpoints + DDB + SQS + S3 + Lambda x2 + HTTP API | 109.7 | 23.4 | 127.3 | 166.1 | median favours cdkd, overlapping |
 | **ecs** | VPC 2AZ + Fargate cluster/task/service + ALB + target group | **162.8** | 34.5 | 209.5 | 276.7 | 1.29x, separated |
-| **cloudfront** | S3 origin + CloudFront + OAC | 174.7 | 13.1 | 177.5 | 209.8 | tie |
+| **cloudfront -- created (fire and forget)** | S3 origin + CloudFront + OAC | 11.1 | 10.4 | 10.3 (`wait_for_deployment=false`) | no such mode | tie |
+| **cloudfront -- `Deployed`** | S3 origin + CloudFront + OAC | 174.0 (`--full-wait`) | n/a | 166.4 | 232.3 | tie |
+
+The cloudfront scenario became two rows on 2026-07-31: cdkd >= 0.271
+(go-to-k/cdkd#1282) flipped its default completion for
+`AWS::CloudFront::Distribution` to fire-and-forget, so the tools' DEFAULTS no
+longer share a completion definition there. Each row holds every tool to the
+same definition; a cell outside a tool's default names the selecting flag.
+Both cloudfront rows were re-measured in one interleaved campaign on cdkd
+0.272.0 (all six modes, same 7-run rule); the other scenarios' numbers are
+from the original campaign.
 
 cdkd is clearly faster than Terraform in four of the six scenarios -- wide
 2.31x, serverless 2.22x, ecs 1.29x, ec2 1.23x, each with completely separated
 run distributions. Of the remaining two, webapp's median favours cdkd by
 17.6s but its runs overlap Terraform's too much for n=7 to separate them, and
-cloudfront is a tie. **No scenario is slower.** Against CloudFormation cdkd is
-faster everywhere, by 1.7x to 4.9x.
+cloudfront is a tie in BOTH completion definitions (0.8s apart fire-and-forget,
+7.6s apart with fully overlapping runs on `Deployed`). **No scenario is
+slower.** Against CloudFormation cdkd is faster everywhere, by 1.3x to 4.9x
+(the `Deployed`-definition cloudfront pair, 174.0 vs 232.3, is the 1.3x
+floor).
 
 The pattern is the point: **cdkd's lead is largest where the wall-clock is
 dominated by orchestration, and vanishes where it is dominated by AWS-side
@@ -131,17 +144,21 @@ definition explicitly, here they are compared directly:
 | Comparison | cdkd | Terraform |
 |---|---:|---:|
 | ecs, both waiting for a steady service (`--full-wait` vs `wait_for_steady_state=true`) | **227.7** | 282.7 |
-| cloudfront, neither waiting for propagation (`--no-wait` vs `wait_for_deployment=false`) | 13.1 | 11.5 |
+| cloudfront, neither waiting for propagation (cdkd default / `--no-wait` vs `wait_for_deployment=false`) | 11.1 / 10.4 | 10.3 |
+| cloudfront, both waiting for `Deployed` (`--full-wait` vs Terraform default) | 174.0 | 166.4 |
 
 The ecs row is the one that matters most for reading the rest of this
 document: with the completion definition held identical, cdkd is still 1.24x
 faster. Whatever the default-mode numbers show, they are not an artifact of
 cdkd waiting for less.
 
-The cloudfront row is a tie -- 1.6s apart on samples that span 9.8-18.6s and
-10.0-21.9s. Per the noise rule in Method, single-digit-second gaps are ties
-regardless of direction, and this one is reported the same way the 2.8s
-default-mode gap is.
+Both cloudfront rows are ties. Fire-and-forget is 0.8s apart on samples that
+span 9.9-27.9s and 9.9-12.1s; `Deployed` is 7.6s apart on 163.7-216.6s vs
+155.7-188.4s -- fully overlapping ranges that n=7 cannot separate. Per the
+noise rule in Method, single-digit-second gaps are ties regardless of
+direction. (Since go-to-k/cdkd#1282 the cloudfront summary rows above ARE
+these matched pairs -- the scenario's defaults no longer share a definition,
+so the two-row summary and this table say the same thing.)
 
 ## Per-run detail (median / all runs)
 
@@ -169,11 +186,12 @@ default-mode gap is.
 | ecs | CloudFormation | 276.7 | 281.6 / 276.3 / 276.7 / 276.3 / 276.5 / 276.8 / 276.7 |
 | ecs | Terraform | 209.5 | 211.8 / 203.1 / 212.6 / 199.3 / 219.5 / 209.3 / 209.5 |
 | ecs | Terraform (wait for healthy) | 282.7 | 324.2 / 269.9 / 284.9 / 293.9 / 282.7 / 269.8 / 259.6 |
-| cloudfront | cdkd | 174.7 | 157.8 / 163.0 / 196.5 / 174.7 / 163.9 / 181.8 / 181.4 |
-| cloudfront | cdkd --no-wait | 13.1 | 10.9 / 11.6 / 13.6 / 9.8 / 18.6 / 13.1 / 16.3 |
-| cloudfront | CloudFormation | 209.8 | 198.4 / 232.2 / 231.6 / 198.7 / 209.8 / 196.0 / 259.5 |
-| cloudfront | Terraform | 177.5 | 187.0 / 165.6 / 177.5 / 165.3 / 180.2 / 165.0 / 198.5 |
-| cloudfront | Terraform (no wait) | 11.5 | 11.4 / 21.9 / 10.9 / 10.0 / 12.4 / 11.5 / 14.9 |
+| cloudfront | cdkd | 11.1 | 27.9 / 11.1 / 11.2 / 11.8 / 10.5 / 9.9 / 10.5 |
+| cloudfront | cdkd --no-wait | 10.4 | 9.8 / 10.1 / 10.4 / 11.0 / 10.7 / 9.9 / 10.5 |
+| cloudfront | cdkd --full-wait | 174.0 | 163.7 / 164.0 / 163.9 / 174.0 / 216.6 / 174.4 / 184.6 |
+| cloudfront | CloudFormation | 232.3 | 198.8 / 232.3 / 198.6 / 232.5 / 232.7 / 232.3 / 321.0 |
+| cloudfront | Terraform | 166.4 | 166.4 / 176.3 / 188.4 / 165.8 / 155.7 / 176.1 / 166.1 |
+| cloudfront | Terraform (no wait) | 10.3 | 10.3 / 10.6 / 12.1 / 9.9 / 9.9 / 10.0 / 10.9 |
 
 ## Scenario notes
 
@@ -187,10 +205,15 @@ default-mode gap is.
   (about 90 to 120s) is a floor every tool pays, which compresses the difference.
   Neither cdkd nor Terraform can win against physics on its own. Only `--no-wait`,
   which skips the NAT stabilization wait, lands in a different league at 32.4s.
-- **cloudfront (cdkd beats Terraform)**: CloudFront propagation (180s+, high
-  variance) dominates. After the polling fixes, cdkd's 171.2s beats Terraform's
-  ~186s (excluding the hung run) and CloudFormation's 208.1s, so cdkd < TF < CFn.
-  `--no-wait` is 17.8s (15.0 / 17.8 / 18.2) because it skips the propagation wait.
+- **cloudfront (a tie in both completion definitions)**: since cdkd >= 0.271
+  (go-to-k/cdkd#1282) the scenario is two rows. Fire-and-forget (cdkd default
+  11.1 / `--no-wait` 10.4 vs Terraform `wait_for_deployment=false` 10.3) is
+  pure API accept on both sides. `Deployed` (cdkd `--full-wait` 174.0 vs
+  Terraform default 166.4, CloudFormation 232.3) is dominated by CloudFront
+  edge propagation (~160s+, high variance), a floor every tool pays; the 7.6s
+  median gap sits inside fully overlapping ranges. cdkd's run-1 default
+  outlier (27.9s vs the 9.9-11.8s tail) was not root-caused (the harness
+  overwrites per-run logs); the median is unaffected either way.
 - **ec2**: VPC (1 AZ, public only) + SecurityGroup + IAM Role + InstanceProfile +
   `t3.micro` x3 + EBS. No NAT — the webapp scenario already measures that floor
   and it would dominate everything else here. No ALB and no AutoScalingGroup:
