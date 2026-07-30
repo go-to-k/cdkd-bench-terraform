@@ -52,3 +52,7 @@ new EcsStack(app, id('BenchEcsNw'), { env });
 // reusing one stack for the default and --full-wait runs risks a
 // DuplicateLoadBalancerName on the second create.
 new EcsStack(app, id('BenchEcsFw'), { env });
+// cdkd >= 0.271 (cdkd#1282): CloudFront Distribution's default completion is
+// fire-and-forget and --full-wait opts into the Deployed wait, so the
+// cloudfront scenario has a real --full-wait mode too.
+new CloudFrontStack(app, id('BenchCloudFrontFw'), { env });
