@@ -6,7 +6,12 @@ cdk/node_modules/
 **/*.tfstate
 **/*.tfstate.*
 terraform/.build/
+# Per-batch harness output. RESULTS.md is the single record of what was
+# measured -- these files are intermediate: one file per invocation, while a
+# published row is pooled from several invocations, so an individual file
+# cannot be mapped back to a table row on its own.
 results/*.log
+results/*.md
 !results/.gitkeep
 
 # unpublished blog handoff spec (kept local)

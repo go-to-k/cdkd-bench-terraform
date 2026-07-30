@@ -23,6 +23,20 @@ variable "prefix" {
   default = "bench-tf-cf"
 }
 
+# The completion definition for this scenario. true (the provider's own
+# default) blocks until the distribution reaches `Deployed`, which is what cdkd
+# and CloudFormation do by default too. false returns as soon as the
+# distribution is created, which is Terraform's counterpart to
+# `cdkd deploy --no-wait`.
+#
+# It was left unset (i.e. true) in the first published run, so the results
+# table showed `cdkd --no-wait` at 17.8s against Terraform's 191.1s and read as
+# a capability only cdkd has. It is not; it was a measurement gap.
+variable "wait_for_deployment" {
+  type    = bool
+  default = true
+}
+
 provider "aws" {
   region = var.region
 }
@@ -60,6 +74,7 @@ resource "aws_cloudfront_distribution" "this" {
   enabled             = true
   comment             = "cdkd-bench cloudfront"
   default_root_object = "index.html"
+  wait_for_deployment = var.wait_for_deployment
 
   origin {
     domain_name              = aws_s3_bucket.origin.bucket_regional_domain_name
