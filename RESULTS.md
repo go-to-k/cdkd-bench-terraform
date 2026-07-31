@@ -16,7 +16,12 @@ The same logical stack, expressed in CDK (deployed with `cdkd` and with
   download) is done in advance and **not** counted.
 - Region us-east-1 (CloudFront is global, so the cloudfront scenario is
   effectively region-independent).
-- Every number here comes from ONE cdkd binary in one measurement campaign.
+- Every number within a scenario comes from ONE cdkd binary in one
+  interleaved measurement campaign -- comparisons only ever happen inside a
+  scenario row, never across rows. Scenarios are re-measured per campaign
+  when a cdkd behavior change invalidates them; each such row notes its
+  campaign, and superseded numbers are archived below (see "Superseded
+  measurements").
 - Units are seconds. **Bold** marks the fastest tool for that scenario.
 - **A median gap only counts when the two run distributions actually
   separate.** Reported per row below as either "separated" (no cdkd run
@@ -390,3 +395,22 @@ RUNS=3 ./scripts/run-benchmark.sh cdkd,tf webapp
   of 3.
 - SQS has a 60s name-reuse cooldown. That is an AWS constraint, not a tool defect.
 - cdkd is experimental and intended for dev/test workflows.
+
+## Superseded measurements
+
+Rows above are replaced (not appended) when a cdkd behavior change
+invalidates a scenario's completion semantics, so the tables always describe
+CURRENT cdkd. The full pre-replacement text, including per-run detail, stays
+in git history; this section records what was replaced and why, so the
+provenance is readable without digging through `git log`.
+
+- **cloudfront, pre-cdkd#1282 campaign** (replaced 2026-07-31 by PR #6, old
+  text at commit `36f6b0c`): measured when cdkd's DEFAULT still waited for
+  `Deployed`, so the scenario was one default-vs-default row -- cdkd 174.7 /
+  `--no-wait` 13.1 / Terraform 177.5 / CloudFormation 209.8 /
+  Terraform `wait_for_deployment=false` 11.5 (tie). cdkd >= 0.271 flipped the
+  default to fire-and-forget (go-to-k/cdkd#1282), which made that row's
+  completion definitions mismatched and un-reproducible on current cdkd; the
+  scenario was re-measured on cdkd 0.272.0 as the two-row form above. The
+  `--full-wait` mode did not exist for CloudFront in the old campaign's
+  binary, so the old campaign cannot be extended -- only replaced.
