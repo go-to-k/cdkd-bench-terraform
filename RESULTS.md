@@ -111,8 +111,8 @@ document reports first deploys.
 | **ec2** | VPC + subnet + SG + IAM role + EC2 instance x3 (t3.micro + EBS) | **29.1** | 22.0 | 35.9 | 193.9 | 1.23x, separated |
 | **webapp** | VPC + NAT + subnets + gateway endpoints + DDB + SQS + S3 + Lambda x2 + HTTP API | 109.7 | 23.4 | 127.3 | 166.1 | median favours cdkd, overlapping |
 | **ecs** | VPC 2AZ + Fargate cluster/task/service + ALB + target group | **162.8** | 34.5 | 209.5 | 276.7 | 1.29x, separated |
-| **cloudfront -- created (fire and forget)** | S3 origin + CloudFront + OAC | 11.1 | 10.4 | 10.3 (`wait_for_deployment=false`) | no such mode | tie |
-| **cloudfront -- `Deployed`** | S3 origin + CloudFront + OAC | 174.0 (`--full-wait`) | n/a | 166.4 | 232.3 | tie |
+| **cloudfront -- created (fire and forget)** | S3 origin + CloudFront + OAC | 11.1 | 10.4 | 10.3 (`wait_for_deployment=false`) | no such mode | median favours Terraform, overlapping |
+| **cloudfront -- `Deployed`** | S3 origin + CloudFront + OAC | 174.0 (`--full-wait`) | n/a | 166.4 | 232.3 | median favours Terraform, overlapping |
 
 The cloudfront scenario became two rows on 2026-07-31: cdkd >= 0.271
 (go-to-k/cdkd#1282) flipped its default completion for
@@ -127,17 +127,21 @@ cdkd is clearly faster than Terraform in four of the six scenarios -- wide
 2.31x, serverless 2.22x, ecs 1.29x, ec2 1.23x, each with completely separated
 run distributions. Of the remaining two, webapp's median favours cdkd by
 17.6s but its runs overlap Terraform's too much for n=7 to separate them, and
-cloudfront is a tie in BOTH completion definitions (0.8s apart fire-and-forget,
-7.6s apart with fully overlapping runs on `Deployed`). **No scenario is
-slower.** Against CloudFormation cdkd is faster everywhere, by 1.3x to 4.9x
+cloudfront is a tie in BOTH completion definitions -- with the medians
+leaning Terraform (0.8s apart fire-and-forget, 7.6s apart on `Deployed`,
+fully overlapping runs in both), the mirror image of webapp's cdkd-leaning
+tie. **No scenario separates in Terraform's favour**: every tie is disclosed
+with its lean, and the noise rule counts a within-noise lean for neither
+side. Against CloudFormation cdkd is faster everywhere, by 1.3x to 4.9x
 (the `Deployed`-definition cloudfront pair, 174.0 vs 232.3, is the 1.3x
 floor).
 
 The pattern is the point: **cdkd's lead is largest where the wall-clock is
 dominated by orchestration, and vanishes where it is dominated by AWS-side
 physical provisioning.** wide and serverless are almost pure orchestration and
-cdkd runs 2.2-2.3x faster; cloudfront is almost pure propagation delay and the
-two tools land 2.8s apart, which this document treats as a tie. Nothing here
+cdkd runs 2.2-2.3x faster; cloudfront is almost pure propagation delay under
+the `Deployed` definition and the two tools land 7.6s apart inside fully
+overlapping runs, which this document treats as a tie. Nothing here
 makes AWS itself faster, and a benchmark that claimed otherwise would be wrong.
 
 ### Matched completion definitions
