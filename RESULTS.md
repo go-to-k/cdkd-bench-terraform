@@ -61,10 +61,12 @@ That cuts both ways, and this table shows both directions:
   `CreateLoadBalancer` returned, while CloudFormation and Terraform both wait
   for the load balancer to reach `active`. cdkd now waits too, which costs
   90-180s on any stack with an ALB. The ecs row below pays it.
-- **It kept cdkd fast on ECS Services.** CloudFormation waits for steady state;
-  Terraform's `wait_for_steady_state` defaults to false. cdkd keeps the
-  fire-and-forget default and offers `--full-wait` as the opt-in, which is the
-  same choice Terraform gives its users.
+- **It waits for ECS Services like CloudFormation.** CloudFormation waits for
+  steady state; Terraform's `wait_for_steady_state` defaults to false. cdkd
+  waits by default (go-to-k/cdkd#5571): accepting `CreateService` /
+  `UpdateService` says nothing about whether the rollout succeeds, so the
+  wait is where a failed rollout shows up. `--no-wait` opts out. The ecs row
+  below therefore compares cdkd with Terraform's `wait_for_steady_state=true`.
 
 ### Every run is a first deploy (and why that had to be fixed)
 
@@ -110,7 +112,7 @@ document reports first deploys.
 | **serverless** | Lambda x3 + HTTP API + DDB + SNS/SQS + EventBridge | **25.9** | 24.6 | 57.5 | 127.1 | 2.22x, separated |
 | **ec2** | VPC + subnet + SG + IAM role + EC2 instance x3 (t3.micro + EBS) | **29.1** | 22.0 | 35.9 | 193.9 | 1.23x, separated |
 | **webapp** | VPC + NAT + subnets + gateway endpoints + DDB + SQS + S3 + Lambda x2 + HTTP API | 109.7 | 23.4 | 127.3 | 166.1 | median favours cdkd, overlapping |
-| **ecs** | VPC 2AZ + Fargate cluster/task/service + ALB + target group | **162.8** | 34.5 | 209.5 | 276.7 | 1.29x, separated |
+| **ecs -- steady state** | VPC 2AZ + Fargate cluster/task/service + ALB + target group | **176.2** | 34.5 | 228.9 (`wait_for_steady_state=true`) | 276.7 | 1.30x, separated |
 | **cloudfront -- created (fire and forget)** | S3 origin + CloudFront + OAC | 11.1 | 10.4 | 10.3 (`wait_for_deployment=false`) | no such mode | median favours Terraform, overlapping |
 | **cloudfront -- `Deployed`** | S3 origin + CloudFront + OAC | 174.0 (`--full-wait`) | n/a | 166.4 | 232.3 | median favours Terraform, overlapping |
 
@@ -120,21 +122,27 @@ The cloudfront scenario became two rows on 2026-07-31: cdkd >= 0.271
 longer share a completion definition there. Each row holds every tool to the
 same definition; a cell outside a tool's default names the selecting flag.
 Both cloudfront rows were re-measured in one interleaved campaign on cdkd
-0.272.0 (all six modes, same 7-run rule); the other scenarios' numbers are
-from the original campaign.
+0.272.0 (all six modes, same 7-run rule). The ecs row's cdkd and Terraform
+cells were re-measured on 2026-10-30 in their own interleaved campaign, on a
+cdkd built from main at `54a8aa0c9` (which includes go-to-k/cdkd#5571, the
+steady-state default); its `--no-wait` and CloudFormation cells are from the
+original campaign. The other scenarios' numbers are from the original
+campaign.
 
 cdkd is clearly faster than Terraform in four of the six scenarios -- wide
-2.31x, serverless 2.22x, ecs 1.29x, ec2 1.23x, each with completely separated
-run distributions. Of the remaining two, webapp's median favours cdkd by
-17.6s but its runs overlap Terraform's too much for n=7 to separate them, and
-cloudfront is a tie in BOTH completion definitions -- with the medians
-leaning Terraform (0.8s apart fire-and-forget, 7.6s apart on `Deployed`,
-fully overlapping runs in both), the mirror image of webapp's cdkd-leaning
-tie. **No scenario separates in Terraform's favour**: every tie is disclosed
-with its lean, and the noise rule counts a within-noise lean for neither
-side. Against CloudFormation cdkd is faster everywhere, by 1.3x to 4.9x
-(the `Deployed`-definition cloudfront pair, 174.0 vs 232.3, is the 1.3x
-floor).
+2.31x, serverless 2.22x, ec2 1.23x, ecs 1.30x, each with completely separated
+run distributions (ecs: 170.8-180.1s against 207.1-244.3s). Of the remaining
+two, webapp's median favours cdkd by 17.6s, but its runs overlap Terraform's
+too much for n=7 to separate them, and cloudfront is a tie in BOTH completion
+definitions -- with the medians leaning Terraform (0.8s apart
+fire-and-forget, 7.6s apart on `Deployed`, fully overlapping runs in both),
+the mirror image of webapp's cdkd-leaning tie. **No scenario separates in
+Terraform's favour**: every tie is disclosed with its lean, and the noise rule
+counts a within-noise lean for neither side. Against CloudFormation cdkd is
+faster everywhere, by 1.3x to 6.7x (the cloudfront `Deployed` pair, 174.0 vs
+232.3, is the 1.3x floor; ec2, 29.1 vs 193.9, is the top). The ecs row is
+left out of that range, because its cdkd and CloudFormation cells come from
+different campaigns.
 
 The pattern is the point: **cdkd's lead is largest where the wall-clock is
 dominated by orchestration, and vanishes where it is dominated by AWS-side
@@ -152,14 +160,18 @@ definition explicitly, here they are compared directly:
 
 | Comparison | cdkd | Terraform |
 |---|---:|---:|
-| ecs, both waiting for a steady service (`--full-wait` vs `wait_for_steady_state=true`) | **227.7** | 282.7 |
+| ecs, both waiting for a steady service (cdkd default vs `wait_for_steady_state=true`; 2026-10-30 campaign) | 176.2 | 228.9 |
+| ecs, neither waiting for a steady service (the original campaign binary's default vs Terraform default; no current cdkd mode) | 162.8 | 209.5 |
 | cloudfront, neither waiting for propagation (cdkd default / `--no-wait` vs `wait_for_deployment=false`) | 11.1 / 10.4 | 10.3 |
 | cloudfront, both waiting for `Deployed` (`--full-wait` vs Terraform default) | 174.0 | 166.4 |
 
-The ecs row is the one that matters most for reading the rest of this
-document: with the completion definition held identical, cdkd is still 1.24x
-faster. Whatever the default-mode numbers show, they are not an artifact of
-cdkd waiting for less.
+With the completion definition held identical on ecs, cdkd's median is
+1.30x lower and the runs separate. Whatever the default-mode numbers show,
+they are not an artifact of cdkd waiting for less. The not-waiting ecs pair
+is from the original campaign and has no current cdkd counterpart: today's
+`--no-wait` also skips the ALB's `active` wait. Do not compare it with the
+waiting pair: both tools ran about 50s faster in the 2026-10-30 campaign
+than in the original one.
 
 Both cloudfront rows are ties. Fire-and-forget is 0.8s apart on samples that
 span 9.9-27.9s and 9.9-12.1s; `Deployed` is 7.6s apart on 163.7-216.6s vs
@@ -189,12 +201,12 @@ so the two-row summary and this table say the same thing.)
 | webapp | cdkd --no-wait | 23.4 | 23.4 / 23.3 / 26.9 / 24.7 / 23.4 / 23.2 / 23.7 |
 | webapp | CloudFormation | 166.1 | 182.4 / 143.7 / 154.7 / 177.1 / 149.1 / 166.1 / 194.7 |
 | webapp | Terraform | 127.3 | 137.0 / 127.5 / 117.0 / 137.5 / 116.5 / 127.3 / 105.9 |
-| ecs | cdkd | 162.8 | 162.4 / 162.8 / 180.8 / 162.2 / 160.0 / 163.3 / 163.7 |
+| ecs | cdkd (2026-10-30 campaign) | 176.2 | 172.1 / 179.5 / 176.2 / 172.2 / 180.1 / 170.8 / 179.7 |
+| ecs | cdkd (pre-#5571 default, no ECS wait) | 162.8 | 162.4 / 162.8 / 180.8 / 162.2 / 160.0 / 163.3 / 163.7 |
 | ecs | cdkd --no-wait | 34.5 | 34.7 / 34.3 / 34.5 / 34.6 / 34.4 / 34.6 / 34.4 |
-| ecs | cdkd --full-wait | 227.7 | 226.5 / 217.7 / 227.7 / 290.1 / 229.1 / 217.8 / 249.9 |
 | ecs | CloudFormation | 276.7 | 281.6 / 276.3 / 276.7 / 276.3 / 276.5 / 276.8 / 276.7 |
 | ecs | Terraform | 209.5 | 211.8 / 203.1 / 212.6 / 199.3 / 219.5 / 209.3 / 209.5 |
-| ecs | Terraform (wait for healthy) | 282.7 | 324.2 / 269.9 / 284.9 / 293.9 / 282.7 / 269.8 / 259.6 |
+| ecs | Terraform (wait for healthy, 2026-10-30 campaign) | 228.9 | 229.0 / 220.1 / 228.8 / 244.3 / 207.1 / 228.9 / 239.3 |
 | cloudfront | cdkd | 11.1 | 27.9 / 11.1 / 11.2 / 11.8 / 10.5 / 9.9 / 10.5 |
 | cloudfront | cdkd --no-wait | 10.4 | 9.8 / 10.1 / 10.4 / 11.0 / 10.7 / 9.9 / 10.5 |
 | cloudfront | cdkd --full-wait | 174.0 | 163.7 / 164.0 / 163.9 / 174.0 / 216.6 / 174.4 / 184.6 |
@@ -418,3 +430,17 @@ provenance is readable without digging through `git log`.
   scenario was re-measured on cdkd 0.272.0 as the two-row form above. The
   `--full-wait` mode did not exist for CloudFront in the old campaign's
   binary, so the old campaign cannot be extended -- only replaced.
+- **ecs, pre-cdkd#5571 summary row** (replaced by this change): measured
+  when cdkd's DEFAULT did not wait for ECS steady state, so the summary row
+  compared defaults that both skipped it -- cdkd 162.8 / Terraform 209.5,
+  1.29x, separated. cdkd now waits by default (go-to-k/cdkd#5571), which
+  made that row's cdkd cell un-reproducible on current cdkd. The old pair
+  stays in the matched-definitions table.
+- **ecs, original campaign's waiting pair** (replaced by this change): cdkd
+  `--full-wait` 227.7 (226.5 / 217.7 / 227.7 / 290.1 / 229.1 / 217.8 /
+  249.9) vs Terraform `wait_for_steady_state=true` 282.7 (324.2 / 269.9 /
+  284.9 / 293.9 / 282.7 / 269.8 / 259.6), 1.24x, overlapping. Rather than
+  stand in `--full-wait` for the new default, the pair was re-measured on
+  2026-10-30 with the default itself: cdkd 176.2 vs Terraform 228.9, 1.30x,
+  separated. Both tools ran about 50s faster than in the original campaign,
+  so the two campaigns are not compared with each other.
